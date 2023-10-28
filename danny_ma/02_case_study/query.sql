@@ -55,109 +55,120 @@
 -- A. Pizza Metrics
 
 -- How many pizzas were ordered?
-SELECT COUNT() AS 'Pizzas Ordered' FROM customer_orders;
+SELECT COUNT(order_id) AS 'Pizzas Ordered' FROM customer_orders;
 -- How many unique customer orders were made?
-SELECT COUNT() AS 'Unique Customer Orders' FROM (SELECT * FROM customer_orders GROUP BY order_time);
--- How many successful orders were delivered by each runner?
-SELECT COUNT() AS 'Successful Orders' FROM runner_orders 
-WHERE 
-pickup_time IS NOT NULL 
-AND distance IS NOT NULL 
-AND duration IS NOT NULL;
--- How many of each type of pizza was delivered?
-SELECT pizza_names.pizza_name, COUNT() AS 'Pizza Type Delivered' FROM customer_orders
-JOIN pizza_names
-ON pizza_names.pizza_id = customer_orders.pizza_id
-GROUP BY customer_orders.pizza_id;
--- How many Vegetarian and Meatlovers were ordered by each customer?
-SELECT customer_id, pizza_names.pizza_name, COUNT() AS 'Pizza Type Delivered' FROM customer_orders
-JOIN pizza_names
-ON pizza_names.pizza_id = customer_orders.pizza_id
-GROUP BY customer_orders.customer_id, customer_orders.pizza_id;
--- What was the maximum number of pizzas delivered in a single order?
-SELECT COUNT(order_id) AS 'Max Pizza in a single order' FROM customer_orders
-GROUP BY order_id
-ORDER BY COUNT(order_id) DESC
-LIMIT 1;
--- For each customer, how many delivered pizzas had at least 1 change and how many had no changes?
-SELECT customer_id, 
-SUM(
-        CASE
-            WHEN exclusions IS NOT NULL OR extras IS NOT NULL
-            THEN 1
-            ELSE 0
-        END 
-) AS 'Pizza with Changes',
+-- SELECT COUNT() AS 'Unique Customer Orders' FROM (SELECT * FROM customer_orders GROUP BY order_time);
+-- -- How many successful orders were delivered by each runner?
+-- SELECT COUNT() AS 'Successful Orders' FROM runner_orders 
+-- WHERE 
+-- pickup_time IS NOT NULL 
+-- AND distance IS NOT NULL 
+-- AND duration IS NOT NULL;
+-- -- How many of each type of pizza was delivered?
+-- SELECT pizza_names.pizza_name, COUNT() AS 'Pizza Type Delivered' FROM customer_orders
+-- JOIN pizza_names
+-- ON pizza_names.pizza_id = customer_orders.pizza_id
+-- GROUP BY customer_orders.pizza_id;
+-- -- How many Vegetarian and Meatlovers were ordered by each customer?
+-- SELECT customer_id, pizza_names.pizza_name, COUNT() AS 'Pizza Type Delivered' FROM customer_orders
+-- JOIN pizza_names
+-- ON pizza_names.pizza_id = customer_orders.pizza_id
+-- GROUP BY customer_orders.customer_id, customer_orders.pizza_id;
+-- -- What was the maximum number of pizzas delivered in a single order?
+-- SELECT COUNT(order_id) AS 'Max Pizza in a single order' FROM customer_orders
+-- GROUP BY order_id
+-- ORDER BY COUNT(order_id) DESC
+-- LIMIT 1;
+-- -- For each customer, how many delivered pizzas had at least 1 change and how many had no changes?
+-- SELECT customer_id, 
+-- SUM(
+--         CASE
+--             WHEN exclusions IS NOT NULL OR extras IS NOT NULL
+--             THEN 1
+--             ELSE 0
+--         END 
+-- ) AS 'Pizza with Changes',
 
-SUM(
-        CASE
-            WHEN exclusions IS NULL AND extras IS NULL
-            THEN 1
-            ELSE 0
-        END 
-) AS 'Pizza with no Changes'
-FROM customer_orders 
-GROUP BY customer_id; 
--- How many pizzas were delivered that had both exclusions and extras?
-SELECT COUNT() AS 'Pizz with both exclusions and extras' FROM customer_orders
-WHERE 
-exclusions IS NOT NULL AND
-extras IS NOT NULL;
--- What was the total volume of pizzas ordered for each hour of the day?
-SELECT STRFTIME('%H',order_time), COUNT() AS 'Number of Pizza each hour of the day' FROM customer_orders
-GROUP BY STRFTIME('%H',order_time);
--- What was the volume of orders for each day of the week?
-SELECT STRFTIME('%w',order_time), COUNT() AS 'Number of Pizza each day of the week', 
-(CASE
-    WHEN STRFTIME('%w',order_time)='0' THEN 'SUN'
-    WHEN STRFTIME('%w',order_time)='1' THEN 'MON'
-    WHEN STRFTIME('%w',order_time)='2' THEN 'TUE'
-    WHEN STRFTIME('%w',order_time)='3' THEN 'WED'
-    WHEN STRFTIME('%w',order_time)='4' THEN 'THU'
-    WHEN STRFTIME('%w',order_time)='5' THEN 'FRI'
-    WHEN STRFTIME('%w',order_time)='6' THEN 'SAT'
-END) AS 'Weekday'
-FROM customer_orders
-GROUP BY STRFTIME('%w',order_time);
+-- SUM(
+--         CASE
+--             WHEN exclusions IS NULL AND extras IS NULL
+--             THEN 1
+--             ELSE 0
+--         END 
+-- ) AS 'Pizza with no Changes'
+-- FROM customer_orders 
+-- GROUP BY customer_id; 
+-- -- How many pizzas were delivered that had both exclusions and extras?
+-- SELECT COUNT() AS 'Pizz with both exclusions and extras' FROM customer_orders
+-- WHERE 
+-- exclusions IS NOT NULL AND
+-- extras IS NOT NULL;
+-- -- What was the total volume of pizzas ordered for each hour of the day?
+-- SELECT STRFTIME('%H',order_time), COUNT() AS 'Number of Pizza each hour of the day' FROM customer_orders
+-- GROUP BY STRFTIME('%H',order_time);
+-- -- What was the volume of orders for each day of the week?
+-- SELECT STRFTIME('%w',order_time), COUNT() AS 'Number of Pizza each day of the week', 
+-- (CASE
+--     WHEN STRFTIME('%w',order_time)='0' THEN 'SUN'
+--     WHEN STRFTIME('%w',order_time)='1' THEN 'MON'
+--     WHEN STRFTIME('%w',order_time)='2' THEN 'TUE'
+--     WHEN STRFTIME('%w',order_time)='3' THEN 'WED'
+--     WHEN STRFTIME('%w',order_time)='4' THEN 'THU'
+--     WHEN STRFTIME('%w',order_time)='5' THEN 'FRI'
+--     WHEN STRFTIME('%w',order_time)='6' THEN 'SAT'
+-- END) AS 'Weekday'
+-- FROM customer_orders
+-- GROUP BY STRFTIME('%w',order_time);
 
--- B. Runner and Customer Experience
+-- -- B. Runner and Customer Experience
 
--- How many runners signed up for each 1 week period? (i.e. week starts 2021-01-01)
-SELECT (STRFTIME('%W',registration_date) + 1) AS 'Week of Year' , COUNT() AS 'Runners Signed up' FROM runners
-GROUP BY STRFTIME('%W',registration_date);
--- What was the average time in minutes it took for each runner to arrive at the Pizza Runner HQ to pickup the order?
-SELECT runner_orders.runner_id, ROUND(AVG((JULIANDAY(runner_orders.pickup_time)-JULIANDAY(customer_orders.order_time))*24*60),2) AS 'Avg TimeDiff'
-FROM customer_orders
-JOIN runner_orders
-ON runner_orders.order_id = customer_orders.order_id
-GROUP BY runner_id;
--- Is there any relationship between the number of pizzas and how long the order takes to prepare?
-SELECT customer_orders.order_id, COUNT() AS 'Pizzas', runner_orders.duration
-FROM customer_orders
-JOIN runner_orders
-ON runner_orders.order_id = customer_orders.order_id
-GROUP BY customer_orders.order_id
-ORDER BY runner_orders.duration DESC;
--- What was the average distance travelled for each customer?
-SELECT customer_orders.customer_id, ROUND(AVG(runner_orders.distance),2) AS 'Avg Distance travelled'
-FROM customer_orders
-JOIN runner_orders
-ON customer_orders.order_id = runner_orders.order_id
-GROUP BY customer_orders.customer_id;
--- What was the difference between the longest and shortest delivery times for all orders?
-SELECT (MAX(duration)-MIN(duration)) AS 'Diff between Max and Min' FROM runner_orders;
--- What was the average speed for each runner for each delivery and do you notice any trend for these values?
-SELECT runner_orders.runner_id, runner_orders.order_id, ROUND((runner_orders.distance*1000.0)/(runner_orders.duration*60),4) AS 'Avg Speed', COUNT() AS 'Number of Pizzas'
-FROM runner_orders
-JOIN customer_orders
-ON runner_orders.order_id = customer_orders.order_id
-GROUP BY customer_orders.order_id;
--- What is the successful delivery percentage for each runner?
-
+-- -- How many runners signed up for each 1 week period? (i.e. week starts 2021-01-01)
+-- SELECT (STRFTIME('%W',registration_date) + 1) AS 'Week of Year' , COUNT() AS 'Runners Signed up' FROM runners
+-- GROUP BY STRFTIME('%W',registration_date);
+-- -- What was the average time in minutes it took for each runner to arrive at the Pizza Runner HQ to pickup the order?
+-- SELECT runner_orders.runner_id, ROUND(AVG((JULIANDAY(runner_orders.pickup_time)-JULIANDAY(customer_orders.order_time))*24*60),2) AS 'Avg TimeDiff'
+-- FROM customer_orders
+-- JOIN runner_orders
+-- ON runner_orders.order_id = customer_orders.order_id
+-- GROUP BY runner_id;
+-- -- Is there any relationship between the number of pizzas and how long the order takes to prepare?
+-- SELECT customer_orders.order_id, COUNT() AS 'Pizzas', runner_orders.duration
+-- FROM customer_orders
+-- JOIN runner_orders
+-- ON runner_orders.order_id = customer_orders.order_id
+-- GROUP BY customer_orders.order_id
+-- ORDER BY runner_orders.duration DESC;
+-- -- What was the average distance travelled for each customer?
+-- SELECT customer_orders.customer_id, ROUND(AVG(runner_orders.distance),2) AS 'Avg Distance travelled'
+-- FROM customer_orders
+-- JOIN runner_orders
+-- ON customer_orders.order_id = runner_orders.order_id
+-- GROUP BY customer_orders.customer_id;
+-- -- What was the difference between the longest and shortest delivery times for all orders?
+-- SELECT (MAX(duration)-MIN(duration)) AS 'Diff between Max and Min' FROM runner_orders;
+-- -- What was the average speed for each runner for each delivery and do you notice any trend for these values?
+-- SELECT runner_orders.runner_id, runner_orders.order_id, ROUND((runner_orders.distance*1000.0)/(runner_orders.duration*60),4) AS 'Avg Speed', COUNT() AS 'Number of Pizzas'
+-- FROM runner_orders
+-- JOIN customer_orders
+-- ON runner_orders.order_id = customer_orders.order_id
+-- GROUP BY customer_orders.order_id;
+-- -- What is the successful delivery percentage for each runner?
+-- WITH CTE AS (
+-- SELECT runner_id, COUNT() AS 'Total_Orders',
+-- SUM(
+--     CASE
+--         WHEN cancellation IS NULL THEN 1
+--         ELSE 0
+--     END
+-- ) AS 'Successful_Orders'
+-- FROM runner_orders
+-- GROUP BY runner_id
+-- ) SELECT runner_id, Total_Orders,Successful_Orders,ROUND((Successful_Orders*1.0)/Total_Orders,4)*100 AS 'Percentage Success' FROM CTE;
 
 -- C. Ingredient Optimisation
 
 -- What are the standard ingredients for each pizza?
+-- SELECT STRING_SPLIT(toppings,',') from pizza_recipes;
 -- What was the most commonly added extra?
 -- What was the most common exclusion?
 -- Generate an order item for each record in the customers_orders table in the format of one of the following:
