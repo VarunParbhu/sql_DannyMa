@@ -22,15 +22,29 @@ ON menu.product_id = SALES.product_id
 GROUP BY sales.product_id,menu.product_name
 ORDER BY total_bought DESC;
 
--- -- Which item was the most popular for each customer?
--- WITH CTE AS (
--- SELECT customer_id, product_name, count(product_name) AS 'count' FROM sales
--- LEFT JOIN menu
--- ON sales.product_id = menu.product_id
--- GROUP BY customer_id, product_name)
--- SELECT customer_id,product_name, MAX(count)
--- FROM CTE
--- GROUP BY customer_id;
+-- Which item was the most popular for each customer?
+
+WITH table2 AS (
+    SELECT 
+            * , 
+            ROW_NUMBER() OVER(PARTITION BY customer_id ORDER BY total_item DESC) AS rn 
+            FROM (
+                    SELECT 
+                        customer_id, 
+                        product_name, 
+                        COUNT(product_name) AS total_item 
+                    FROM 
+                        sales
+                    LEFT JOIN 
+                        menu
+                    ON 
+                        sales.product_id = menu.product_id
+                    GROUP BY 
+                        customer_id, product_name
+                ) AS table3)
+SELECT customer_id,product_name,total_item FROM table2
+WHERE rn = 1;
+
 
 -- -- Which item was purchased first by the customer after they became a member?
 -- WITH CTE AS (
