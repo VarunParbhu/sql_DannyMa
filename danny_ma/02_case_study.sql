@@ -197,7 +197,6 @@ FROM (
             INNER JOIN customer_orders ON customer_orders.order_id = runner_orders.order_id
     ) AS table1
 GROUP BY table1.customer_id;
-
 -- What was the difference between the longest and shortest delivery times for all orders?
 SELECT (
         MAX(TRY_CAST(duration AS FLOAT)) - MIN(TRY_CAST(duration AS FLOAT))
@@ -205,21 +204,27 @@ SELECT (
 FROM runner_orders;
 
 -- What was the average speed for each runner for each delivery and do you notice any trend for these values?
-SELECT runner_orders.runner_id,
-    runner_orders.order_id,
-    ROUND(
-        (runner_orders.distance * 1000.0) /(runner_orders.duration * 60),
-        4
+SELECT runner_orders.order_id,
+    FORMAT(
+        ROUND(
+            (runner_orders.distance * 1000.0) /(runner_orders.duration * 60),
+            4
+        ),
+        'N2'
     ) AS 'Avg Speed',
-    COUNT() AS 'Number of Pizzas'
-FROM runner_orders
-    JOIN customer_orders ON runner_orders.order_id = customer_orders.order_id
-GROUP BY customer_orders.order_id;
+    table1.numOfPizza
+FROM (
+        SELECT order_id,
+            COUNT(*) AS numOfPizza
+        FROM customer_orders
+        GROUP BY order_id
+    ) AS table1
+    JOIN runner_orders ON runner_orders.order_id = table1.order_id;
 
 -- What is the successful delivery percentage for each runner?
 WITH CTE AS (
     SELECT runner_id,
-        COUNT() AS 'Total_Orders',
+        COUNT(*) AS 'Total_Orders',
         SUM(
             CASE
                 WHEN cancellation IS NULL THEN 1
@@ -232,7 +237,10 @@ WITH CTE AS (
 SELECT runner_id,
     Total_Orders,
     Successful_Orders,
-    ROUND((Successful_Orders * 1.0) / Total_Orders, 4) * 100 AS 'Percentage Success'
+    FORMAT(
+        ((Successful_Orders * 1.0) / Total_Orders) * 100,
+        'N2'
+    ) AS 'Percentage Success'
 FROM CTE;
 
 -- C. Ingredient Optimisation
