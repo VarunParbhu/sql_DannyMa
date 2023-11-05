@@ -49,6 +49,26 @@ USE pizza_runner;
 -- UPDATE runner_orders
 -- SET duration = TRIM(duration);
 
+-- ALTER TABLE pizza_names
+-- ALTER COLUMN pizza_name VARCHAR(20);
+
+
+SELECT table1.pizza_id,
+    pizza_toppings.topping_id,
+    pizza_toppings.topping_name INTO pizza_recipes_temp
+FROM (
+        SELECT pizza_id,
+            trim(value) AS toppings_list
+        FROM pizza_recipes
+            CROSS APPLY STRING_SPLIT(TRY_CAST(toppings AS nvarchar(50)), ',')
+    ) AS table1
+    JOIN pizza_toppings ON pizza_toppings.topping_id = table1.toppings_list;
+
+ALTER TABLE pizza_recipes_temp
+ALTER COLUMN topping_name NVARCHAR(25);
+
+ALTER TABLE pizza_toppings
+ALTER COLUMN topping_name NVARCHAR(25);
 
 
 -- A. Pizza Metrics
@@ -246,18 +266,178 @@ FROM CTE;
 -- C. Ingredient Optimisation
 
 -- What are the standard ingredients for each pizza?
--- SELECT STRING_SPLIT(toppings,',') from pizza_recipes;
+SELECT pizza_name,
+    con AS 'Receipe'
+FROM (
+        SELECT toppings_table.pizza_id,
+            STRING_AGG(TRY_CAST(topping_name AS NVARCHAR(MAX)), ', ') As con
+        FROM (
+                SELECT pizza_id,
+                    TRIM(value) AS toppings
+                FROM pizza_recipes
+                    CROSS APPLY string_split(TRY_CAST(toppings AS varchar(MAX)), ',')
+            ) AS toppings_table
+            JOIN pizza_toppings ON pizza_toppings.topping_id = toppings_table.toppings
+        GROUP BY pizza_id
+    ) AS table2
+    JOIN pizza_names ON pizza_names.pizza_id = table2.pizza_id;
+
 -- What was the most commonly added extra?
+SELECT pizza_toppings.topping_name,
+    result_table.total_excl
+FROM (
+        SELECT extra,
+            COUNT(extra) AS total_excl
+        FROM (
+                SELECT TRIM(value) AS extra
+                FROM customer_orders
+                    CROSS APPLY string_split(TRY_CAST(extras AS varchar(MAX)), ',')
+            ) AS extra_table
+        GROUP BY extra
+    ) AS result_table
+    JOIN pizza_toppings ON pizza_toppings.topping_id = result_table.extra
+ORDER BY total_excl DESC;
+
 -- What was the most common exclusion?
+SELECT pizza_toppings.topping_name,
+    result_table.total_excl
+FROM (
+        SELECT exclusion,
+            COUNT(exclusion) AS total_excl
+        FROM (
+                SELECT TRIM(value) AS exclusion
+                FROM customer_orders
+                    CROSS APPLY string_split(TRY_CAST(exclusions AS varchar(MAX)), ',')
+            ) AS exclusion_table
+        GROUP BY exclusion
+    ) AS result_table
+    JOIN pizza_toppings ON pizza_toppings.topping_id = result_table.exclusion
+ORDER BY total_excl DESC;
+
 -- Generate an order item for each record in the customers_orders table in the format of one of the following:
 -- Meat Lovers
 -- Meat Lovers - Exclude Beef
 -- Meat Lovers - Extra Bacon
 -- Meat Lovers - Exclude Cheese, Bacon - Extra Mushroom, Peppers
+
+
+
+
+
+
 -- Generate an alphabetically ordered comma separated ingredient list for each pizza order from the customer_orders table and add a 2x in front of any relevant ingredients
 -- For example: "Meat Lovers: 2xBacon, Beef, ... , Salami"
--- What is the total quantity of each ingredient used in all delivered pizzas sorted by most frequent first?
 
+
+
+SELECT *,
+(CASE 
+        WHEN (exclusions IS NULL AND extras IS NULL) THEN (
+        SELECT value FROM table1 CROSS APPLY string_split(toppings,',')
+        )
+        ELSE 'N'
+
+END
+)AS final_receipe
+FROM (
+SELECT order_id, customer_orders.[pizza_id], exclusions, extras, pizza_recipes.toppings
+from customer_orders
+JOIN pizza_recipes
+ON pizza_recipes.pizza_id = customer_orders.pizza_id) AS table1
+;
+
+WITH CTE AS (
+    SELECT order_id,
+        customer_orders.[pizza_id],
+        exclusions,
+        extras,
+        pizza_recipes.toppings
+    from customer_orders
+        JOIN pizza_recipes ON pizza_recipes.pizza_id = customer_orders.pizza_id
+)SELECT *,
+    (
+        CASE
+            WHEN (
+                exclusions IS NULL
+                AND extras IS NULL
+            ) THEN (
+                SELECT STRING_AGG(TRY_CAST(topping_name AS nvarchar(MAX)), ', ') AS final_receipt
+                FROM(
+                        SELECT value AS topping_id
+                        FROM string_split(TRY_CAST(toppings AS nvarchar(MAX)), ',')
+                    ) AS topping_table1
+                    JOIN pizza_toppings ON pizza_toppings.topping_id = topping_table1.topping_id
+            )
+            WHEN (
+                exclusions IS NOT NULL
+                OR extras IS NOT NULL
+            ) THEN (
+                SELECT STRING_AGG(
+                        CASE
+                            WHEN (TRY_CAST(topping_name AS nvarchar(MAX))) IN ('bacon') THEN ('2x' + TRY_CAST(topping_name AS nvarchar(MAX)))
+                            ELSE TRY_CAST(topping_name AS nvarchar(MAX))
+                        END,
+                        ', '
+                    ) AS final_receipt
+                FROM(
+                        SELECT *
+                        FROM (
+                                SELECT TRIM(value) AS topping_id
+                                FROM string_split(TRY_CAST(( TRY_CAST(toppings AS nvarchar(MAX)) + ', ' + TRY_CAST( ISNULL(extras,'') AS nvarchar(MAX))) AS nvarchar(MAX)), ',')
+                            ) AS topping_table1
+                        WHERE topping_table1.topping_id NOT IN (
+                                SELECT TRIM(value) AS exlc_id
+                                FROM string_split(TRY_CAST(exclusions AS nvarchar(MAX)), ',')
+                            )
+                        
+                    ) AS topping_table2
+                    JOIN pizza_toppings ON pizza_toppings.topping_id = topping_table2.topping_id
+            )
+            ELSE 'N'
+        END
+    ) AS final_receipt
+FROM CTE
+
+
+
+
+
+SELECT order_id, customer_orders.[pizza_id], exclusions, extras, pizza_recipes.toppings
+from customer_orders
+JOIN pizza_recipes
+ON pizza_recipes.pizza_id = customer_orders.pizza_id
+;
+
+
+
+
+
+SELECT *, order_id,pizza_id, ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS SplitID, value FROM customer_orders
+CROSS APPLY string_split(TRY_CAST(exclusions AS varchar(MAX)), ',');
+
+
+
+
+
+SELECT * FROM pizza_recipes;
+
+
+SELECT pizza_id,
+    STRING_AGG(TRY_CAST(topping_name AS nvarchar(MAX)), ', ')
+FROM (
+        SELECT *,
+            TRIM(value) AS topping_id
+        FROM pizza_recipes
+            CROSS APPLY string_split(TRY_CAST(toppings AS nvarchar(25)), ',')
+    ) AS topping_table
+    JOIN pizza_toppings ON pizza_toppings.topping_id = topping_table.topping_id
+GROUP BY pizza_id;
+
+
+
+
+
+-- What is the total quantity of each ingredient used in all delivered pizzas sorted by most frequent first?
 
 -- D. Pricing and Ratings
 
@@ -282,3 +462,16 @@ FROM CTE;
 -- E. Bonus Questions
 
 -- If Danny wants to expand his range of pizzas - how would this impact the existing data design? Write an INSERT statement to demonstrate what would happen if a new Supreme pizza with all the toppings was added to the Pizza Runner menu?
+
+WITH CTE AS (
+    SELECT order_id,
+        customer_orders.[pizza_id],
+        exclusions,
+        extras,
+        pizza_recipes.toppings
+    from customer_orders
+        JOIN pizza_recipes ON pizza_recipes.pizza_id = customer_orders.pizza_id
+)
+SELECT *, value
+FROM CTE
+CROSS APPLY string_split(TRY_CAST(toppings AS nvarchar(50)),',')
