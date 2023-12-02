@@ -15,5 +15,8 @@
             "password": "“VarunParbhu080896”",
             "database": "dannys_diner"
         }
+    ],
+    "sqlfluff.excludeRules": [
+        null
     ]
 }

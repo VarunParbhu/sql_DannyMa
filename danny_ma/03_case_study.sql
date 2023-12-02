@@ -4,6 +4,49 @@ USE foodie_fi;
 -- Based off the 8 sample customers provided in the sample from the subscriptions table, write a brief description about each customer’s onboarding journey.
 -- Try to keep it as short as possible - you may also want to run some sort of join to make your explanations a bit easier!
 
+SELECT *,
+    ROW_NUMBER() OVER (
+        PARTITION BY subscriptions.customer_id
+        ORDER BY start_date
+    ) AS seq,
+    LEAD(subscriptions.plan_id) OVER (
+        PARTITION BY customer_id
+        ORDER BY start_date
+    ) AS next_plan_id,
+    LEAD(start_date) OVER (
+        PARTITION BY customer_id
+        ORDER BY start_date
+    ) AS next_start_date
+FROM subscriptions
+    JOIN plans ON subscriptions.plan_id = plans.plan_id
+WHERE customer_id <= 8
+ORDER BY customer_id;
+
+
+SELECT 
+    s.customer_id ,
+    s.plan_id,
+    p.plan_name,
+    p.price,
+    s.start_date,
+    ROW_NUMBER() OVER (
+        PARTITION BY s.customer_id
+        ORDER BY start_date
+    ) AS seq,
+    LEAD(s.plan_id) OVER (
+        PARTITION BY customer_id
+        ORDER BY start_date
+    ) AS next_plan_id,
+    LEAD(start_date) OVER (
+        PARTITION BY customer_id
+        ORDER BY start_date
+    ) AS next_start_date
+INTO CustomerJourney    
+FROM subscriptions as s
+    JOIN plans as p ON s.plan_id = p.plan_id; 
+
+SELECT * FROM plans;
+SELECT * FROM subscriptions;
 -- B. Data Analysis Questions
 
 -- How many customers has Foodie-Fi ever had?
@@ -170,16 +213,65 @@ ORDER BY [plan_id];
 
 
 -- How many customers have upgraded to an annual plan in 2020?
-SELECT *, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY start_date DESC) AS seq FROM subscriptions
-WHERE start_date BETWEEN '2020-01-01' AND '2020-12-31'
+SELECT COUNT(customer_id) AS 'Upgraded to Annual'
+FROM CustomerJourney
+WHERE next_start_date <= '2020-12-31'
+    AND plan_id in (0, 1, 2)
+    AND next_plan_id = 3
+GROUP BY next_plan_id;
 
+-- How many days on average does it take for a customer to upgrade to an annual plan from the day they join Foodie-Fi?
+WITH join_date_table AS (
+    SELECT customer_id,
+        start_date as join_date
+    FROM subscriptions
+    WHERE plan_id = 0
+),
+days_taken_table AS (
+    SELECT DATEDIFF(DAY, join_date, next_start_date) AS days_taken
+    FROM join_date_table
+        JOIN CustomerJourney ON CustomerJourney.customer_id = join_date_table.customer_id
+    WHERE plan_id in (0, 1, 2)
+        AND next_plan_id = 3
+)
+SELECT AVG(days_taken) AS 'Average Days'
+FROM days_taken_table;
 
-SELECT * FROM plans
-
-
--- How many days on average does it take for a customer to an annual plan from the day they join Foodie-Fi?
 -- Can you further breakdown this average value into 30 day periods (i.e. 0-30 days, 31-60 days etc)
+WITH join_date_table AS (
+    SELECT customer_id,
+        start_date as join_date
+    FROM subscriptions
+    WHERE plan_id = 0
+),
+days_taken_table AS (
+    SELECT DATEDIFF(DAY, join_date, next_start_date) AS days_taken
+    FROM join_date_table
+        JOIN CustomerJourney ON CustomerJourney.customer_id = join_date_table.customer_id
+    WHERE plan_id in (0, 1, 2)
+        AND next_plan_id = 3
+),
+group_table AS (
+    SELECT *,
+        FLOOR(days_taken / 30) AS groups
+    FROM days_taken_table
+)
+SELECT CONCAT(
+        (groups * 30) + 1,
+        '-',
+(groups + 1) * 30,
+        ' days'
+    ) AS 'Range',
+    COUNT(days_taken) AS 'Num of Customer Upgrade'
+FROM group_table
+GROUP BY groups;
+
 -- How many customers downgraded from a pro monthly to a basic monthly plan in 2020?
+SELECT COUNT(customer_id) AS 'Downgrade'
+FROM CustomerJourney
+WHERE plan_id = 2
+    AND next_plan_id = 1
+GROUP BY next_plan_id;
 
 -- C. Challenge Payment Question
 
