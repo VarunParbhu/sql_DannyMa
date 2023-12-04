@@ -22,6 +22,7 @@ FROM subscriptions
 WHERE customer_id <= 8
 ORDER BY customer_id;
 
+------------------ New Customer Journey table
 
 SELECT 
     s.customer_id ,
@@ -41,12 +42,14 @@ SELECT
         PARTITION BY customer_id
         ORDER BY start_date
     ) AS next_start_date
-INTO CustomerJourney    
+-- INTO CustomerJourney    
 FROM subscriptions as s
     JOIN plans as p ON s.plan_id = p.plan_id; 
 
 SELECT * FROM plans;
 SELECT * FROM subscriptions;
+
+
 -- B. Data Analysis Questions
 
 -- How many customers has Foodie-Fi ever had?
@@ -220,6 +223,7 @@ WHERE next_start_date <= '2020-12-31'
     AND next_plan_id = 3
 GROUP BY next_plan_id;
 
+
 -- How many days on average does it take for a customer to upgrade to an annual plan from the day they join Foodie-Fi?
 WITH join_date_table AS (
     SELECT customer_id,
@@ -236,6 +240,7 @@ days_taken_table AS (
 )
 SELECT AVG(days_taken) AS 'Average Days'
 FROM days_taken_table;
+
 
 -- Can you further breakdown this average value into 30 day periods (i.e. 0-30 days, 31-60 days etc)
 WITH join_date_table AS (
@@ -266,12 +271,14 @@ SELECT CONCAT(
 FROM group_table
 GROUP BY groups;
 
+
 -- How many customers downgraded from a pro monthly to a basic monthly plan in 2020?
 SELECT COUNT(customer_id) AS 'Downgrade'
 FROM CustomerJourney
 WHERE plan_id = 2
     AND next_plan_id = 1
 GROUP BY next_plan_id;
+
 
 -- C. Challenge Payment Question
 
@@ -280,13 +287,120 @@ GROUP BY next_plan_id;
 -- -- upgrades from basic to monthly or pro plans are reduced by the current paid amount in that month and start immediately
 -- -- upgrades from pro monthly to pro annual are paid at the end of the current billing period and also starts at the end of the month period
 -- -- once a customer churns they will no longer make payments
+WITH RecursiveDateSeries AS (
+    SELECT start_date,
+        next_start_date,
+        customer_id,
+        plan_id,
+        plan_name,
+        price
+    FROM CustomerJourney -- Replace YourTable with the actual name of your table
+    UNION ALL
+    SELECT CASE
+            WHEN plan_id IN (1, 2) THEN DATEADD(MONTH, 1, start_date)
+            WHEN plan_id IN (3) THEN DATEADD(YEAR, 1, start_date)
+        END AS StartDate,
+        next_start_date,
+        customer_id,
+        plan_id,
+        plan_name,
+        price
+    FROM RecursiveDateSeries
+    WHERE CASE
+            WHEN plan_id IN (1, 2) THEN DATEADD(MONTH, 1, start_date)
+            WHEN plan_id IN (3) THEN DATEADD(YEAR, 1, start_date)
+        END < (
+            CASE
+                WHEN next_start_date IS NULL THEN '2020-12-31'
+                ELSE next_start_date
+            END
+        )
+),
+CTE AS (
+    SELECT customer_id,
+        plan_id,
+        LAG(plan_id, 1) OVER (
+            PARTITION BY customer_id
+            ORDER BY start_date
+        ) AS previous_plan_id,
+        plan_name,
+        start_date AS 'payment_date',
+        LAG(price, 1) OVER (
+            PARTITION BY customer_id
+            ORDER BY start_date
+        ) AS previous_price,
+        price,
+        ROW_NUMBER() OVER (
+            PARTITION BY customer_id
+            ORDER BY start_date
+        ) AS payment_order
+    FROM RecursiveDateSeries
+    WHERE plan_id NOT IN (0, 4)
+        AND start_date <= '2020-12-31'
+)
+SELECT customer_id,
+    plan_id,
+    plan_name,
+    payment_date,
+    CASE
+        WHEN previous_plan_id = 2
+        AND plan_id = 3 THEN price
+        WHEN previous_plan_id = 1
+        AND plan_id = 2 THEN price - previous_price
+        WHEN previous_plan_id = 1
+        AND plan_id = 3 THEN price - previous_price
+        ELSE price
+    END AS amount,
+    payment_order
+FROM CTE
+
+------------ REFERENCE TABLE
+-- SELECT customer_id, plan_id,
+--     plan_name,
+--     price,
+--     start_date,
+--     next_start_date,
+--     LAG(price,1) OVER (
+--         PARTITION BY customer_id
+--         ORDER BY start_date
+--     ) AS previous_price,
+--     LAG(plan_id,1) OVER (
+--         PARTITION BY customer_id
+--         ORDER BY start_date
+--     ) AS previous_plan_id
+-- FROM CustomerJourney
+-- WHERE customer_id = 19
+--     AND (
+--         next_start_date <= '2020-12-31'
+--         OR next_start_date IS NULL
+--     )
+--     AND plan_id NOT IN (0, 4);
+
+
+---------- RECURSIVE CTE Syntax
+-- DECLARE @StartDate DATE = '2023-01-01'; -- Replace with your actual start date
+-- DECLARE @EndDate DATE = '2023-12-31'; -- Replace with your actual end date
+
+-- WITH RecursiveDateSeries AS (
+--     SELECT @StartDate AS CurrentDate
+--     UNION ALL
+--     SELECT DATEADD(MONTH, 1, CurrentDate) AS CurrentDate
+--     FROM RecursiveDateSeries
+--     WHERE DATEADD(MONTH, 1, CurrentDate) <= @EndDate
+-- ) SELECT CurrentDate
+-- FROM RecursiveDateSeries;
+
 
 -- D. Outside The Box Questions
 
 -- -- The following are open ended questions which might be asked during a technical interview for this case study - there are no right or wrong answers, but answers that make sense from both a technical and a business perspective make an amazing impression!
 
 -- How would you calculate the rate of growth for Foodie-Fi?
+
 -- What key metrics would you recommend Foodie-Fi management to track over time to assess performance of their overall business?
+
 -- What are some key customer journeys or experiences that you would analyse further to improve customer retention?
+
 -- If the Foodie-Fi team were to create an exit survey shown to customers who wish to cancel their subscription, what questions would you include in the survey?
+
 -- What business levers could the Foodie-Fi team use to reduce the customer churn rate? How would you validate the effectiveness of your ideas?
